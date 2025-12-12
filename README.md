@@ -41,13 +41,23 @@ pip install -r Backend/requirements.txt
 pip install -r TelegramBot/requirements.txt
 ```
 
-2. Создайте файл `.env` в корне проекта:
-```
-BOT_TOKEN=your_bot_token_here
-PORT=5000
-GROQ_API_KEY=your_groq_api_key
-GROQ_MODEL=llama-3.1-70b-versatile
-```
+2. Создайте файлы с переменными окружения:
+   
+   **В корне проекта создайте `.env` или `BOT_TOKEN.env`:**
+   ```
+   BOT_TOKEN=your_bot_token_here
+   PORT=5000
+   ```
+   
+   **В папке `Backend/` создайте `groq.env`:**
+   ```
+   GROQ_API_KEY=your_groq_api_key
+   GROQ_MODEL=qwen/qwen3-32b
+   ```
+   
+   **Или используйте примеры файлов:**
+   - `env.example` — пример для корневого `.env`
+   - `Backend/groq.env.example` — пример для `Backend/groq.env`
 
 **Настройка Groq API:**
 📖 Подробная инструкция по получению ключа: см. файл [GROQ_SETUP.md](GROQ_SETUP.md)
