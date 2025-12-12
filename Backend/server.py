@@ -8,7 +8,18 @@ from aiogram import Bot
 from aiogram.exceptions import TelegramAPIError
 from dotenv import load_dotenv
 
-load_dotenv()
+# Загружаем .env из корня проекта или из папки Backend
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+env_path = os.path.join(BASE_DIR, '.env')
+if not os.path.exists(env_path):
+    env_path = os.path.join(BASE_DIR, 'BOT_TOKEN.env')
+    # Если файл BOT_TOKEN.env существует, загружаем его
+    if os.path.exists(env_path):
+        load_dotenv(env_path, override=True)
+    else:
+        load_dotenv()
+else:
+    load_dotenv(env_path)
 
 app = Flask(__name__)
 CORS(app)  # Разрешаем CORS для запросов с сайта
@@ -17,16 +28,24 @@ CORS(app)  # Разрешаем CORS для запросов с сайта
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Создаём папку TelegramBot если её нет
+TELEGRAM_BOT_DIR = os.path.join(BASE_DIR, "TelegramBot")
+if not os.path.exists(TELEGRAM_BOT_DIR):
+    os.makedirs(TELEGRAM_BOT_DIR)
+    logger.info(f"Создана папка: {TELEGRAM_BOT_DIR}")
+
+CHANNELS_FILE = os.path.join(TELEGRAM_BOT_DIR, "channels.json")
+
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 if not BOT_TOKEN:
+    logger.error(f"BOT_TOKEN не найден. Проверьте файл: {env_path}")
     raise ValueError("BOT_TOKEN не найден в переменных окружения")
 
-# Инициализация aiogram Bot
-bot = Bot(token=BOT_TOKEN)
+logger.info("BOT_TOKEN успешно загружен")
+logger.info(f"Используется файл каналов: {CHANNELS_FILE}")
 
-# Определяем путь к файлу каналов относительно корня проекта
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-CHANNELS_FILE = os.path.join(BASE_DIR, "TelegramBot", "channels.json")
+# Bot будет создаваться для каждого запроса, чтобы избежать проблем с сессией
+logger.info("Aiogram Bot готов к использованию")
 
 
 def load_channels():
@@ -71,31 +90,59 @@ def send_article():
         # Асинхронная функция для отправки сообщений
         async def send_messages():
             nonlocal success_count, failed_channels
-            for channel in channels_to_send:
-                try:
-                    await bot.send_message(
-                        chat_id=channel['id'],
-                        text=article_text,
-                        parse_mode='HTML'
-                    )
-                    success_count += 1
-                    logger.info(f"Статья отправлена в канал: {channel['name']} ({channel['id']})")
-                except TelegramAPIError as e:
-                    error_msg = str(e)
-                    failed_channels.append({
-                        'channel': channel['name'],
-                        'error': error_msg
-                    })
-                    logger.error(f"Ошибка отправки в канал {channel['name']}: {error_msg}")
-                except Exception as e:
-                    failed_channels.append({
-                        'channel': channel.get('name', channel['id']),
-                        'error': str(e)
-                    })
-                    logger.error(f"Ошибка отправки в канал {channel['id']}: {e}")
+            # Создаём новый экземпляр Bot для этого запроса
+            current_bot = Bot(token=BOT_TOKEN)
+            try:
+                for channel in channels_to_send:
+                    try:
+                        await current_bot.send_message(
+                            chat_id=channel['id'],
+                            text=article_text,
+                            parse_mode='HTML'
+                        )
+                        success_count += 1
+                        logger.info(f"Статья отправлена в канал: {channel['name']} ({channel['id']})")
+                    except TelegramAPIError as e:
+                        error_msg = str(e)
+                        failed_channels.append({
+                            'channel': channel['name'],
+                            'error': error_msg
+                        })
+                        logger.error(f"Ошибка отправки в канал {channel['name']}: {error_msg}")
+                    except Exception as e:
+                        failed_channels.append({
+                            'channel': channel.get('name', channel['id']),
+                            'error': str(e)
+                        })
+                        logger.error(f"Ошибка отправки в канал {channel['id']}: {e}")
+            finally:
+                # Закрываем сессию бота после отправки
+                await current_bot.session.close()
         
         # Запускаем асинхронную функцию
-        asyncio.run(send_messages())
+        # Всегда создаём новый event loop для каждого запроса
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            loop.run_until_complete(send_messages())
+        except Exception as e:
+            logger.error(f"Ошибка работы с event loop: {e}")
+            raise
+        finally:
+            # Закрываем loop после использования
+            try:
+                # Отменяем все незавершённые задачи
+                pending = [t for t in asyncio.all_tasks(loop) if not t.done()]
+                for task in pending:
+                    task.cancel()
+                # Ждём отмены задач
+                if pending:
+                    loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+            except Exception:
+                pass
+            finally:
+                if not loop.is_closed():
+                    loop.close()
         
         return jsonify({
             'success': True,
