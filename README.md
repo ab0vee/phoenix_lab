@@ -45,7 +45,18 @@ pip install -r TelegramBot/requirements.txt
 ```
 BOT_TOKEN=your_bot_token_here
 PORT=5000
+GROQ_API_KEY=your_groq_api_key
+GROQ_MODEL=llama-3.1-70b-versatile
 ```
+
+**Настройка Groq API:**
+📖 Подробная инструкция по получению ключа: см. файл [GROQ_SETUP.md](GROQ_SETUP.md)
+
+Кратко:
+1. Зарегистрируйтесь на [Groq.com](https://console.groq.com/)
+2. Создайте API ключ в разделе API Keys
+3. Добавьте `GROQ_API_KEY` в `.env`
+4. Опционально: укажите модель в `GROQ_MODEL` (по умолчанию: `llama-3.1-70b-versatile`)
 
 ### Frontend
 
@@ -98,5 +109,6 @@ npm run dev
 ## API Endpoints
 
 - `GET /api/channels` - получить список каналов
+- `POST /api/rewrite-article` - рерайтить статью через Groq API (требует url и style)
 - `POST /api/send-article` - отправить статью в каналы
 - `GET /api/health` - проверка работоспособности
